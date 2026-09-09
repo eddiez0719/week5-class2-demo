@@ -1,0 +1,73 @@
+name: Reusable Deploy
+
+on:
+  workflow_call:   # defines this as a "function" that other workflows call via `uses:`
+    inputs:
+      environment:
+        description: GitHub Environment name
+        type: string
+        required: true   # caller must pass which environment to deploy to (dev/qa/staging/prod)
+    secrets:
+      aws-role-arn:
+        required: true   # secrets are NOT auto-inherited, caller must pass them explicitly
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-2
+  ECR_REPOSITORY: my-app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}   # binds this run to a GitHub Environment (branch/approval protection)
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to AWS using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws-role-arn }}   # this is the secret passed in by the caller, not the local repo secret
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Show current AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Write .env
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          echo "DOCKER_IMAGE_NAME=${ECR_REGISTRY}/${ECR_REPOSITORY}" > .env
+          echo "TAG=${DEPLOY_ENVIRONMENT}-${GITHUB_SHA}" >> .env   # tag includes env name so dev/qa/staging/prod images don't collide
+
+      - name: Lint Dockerfile
+        run: make lint
+
+      - name: Build image
+        run: make build
+
+      - name: Run container
+        run: make run
+
+      - name: Test application
+        run: make test
+
+      - name: Push image to ECR
+        run: make push
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Clean up container
+        if: always()
+        run: make down

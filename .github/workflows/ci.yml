@@ -1,0 +1,83 @@
+name: Demo 3 - CI
+
+on:
+  push:
+    branches: [dev, qa, staging, main]   # any of these four pushes triggers; which env deploys is decided per-job below
+  pull_request:
+    branches: [main]   # PRs targeting main only run pr-check, never deploy
+
+permissions:
+  contents: read   # default read-only; jobs that need id-token declare it themselves
+
+jobs:
+  pr-check:
+    if: github.event_name == 'pull_request'   # build/test only, no AWS credentials needed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfile
+        run: make lint
+
+      - name: Build image
+        run: make build
+
+      - name: Run container
+        run: make run
+
+      - name: Test application
+        run: make test
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Clean up container
+        if: always()
+        run: make down
+
+  deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'   # only push to dev deploys to dev
+    permissions:
+      id-token: write   # must be declared here too, or it won't be passed down to the called workflow
+      contents: read
+    uses: ./.github/workflows/deploy.yml   # calls the reusable workflow in this same repo
+    with:
+      environment: dev   # becomes inputs.environment in deploy.yml
+    secrets:
+      aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}   # forward this repo's own secret to the reusable workflow
+
+  deploy-qa:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/qa'
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: qa
+    secrets:
+      aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+
+  deploy-staging:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+    secrets:
+      aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
+
+  deploy-prod:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'   # only main triggers production deploy
+    permissions:
+      id-token: write
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: prod
+    secrets:
+      aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}
