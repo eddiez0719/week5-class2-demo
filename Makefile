@@ -26,3 +26,4 @@ push:
 	docker push "$(DOCKER_IMAGE_NAME):$(TAG)"
 down:
 	docker compose down --remove-orphans
+	
