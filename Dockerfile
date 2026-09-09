@@ -7,10 +7,14 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-COPY --chown=10001:10001 app.py /app/app.py   # copy and chown to the non-root user in one step
+# copy and chown to the non-root user in one step
+COPY --chown=10001:10001 app.py /app/app.py
 
-USER 10001:10001   # run as non-root: least-privilege, limits blast radius if compromised
+# run as non-root: least-privilege, limits blast radius if compromised
+USER 10001:10001
 
-EXPOSE 5000   # documentation only; actual port mapping is done in compose.yml
+# documentation only; actual port mapping is done in compose.yml
+EXPOSE 5000
 
-CMD ["python", "app.py"]   # exec form: python is PID 1, receives SIGTERM correctly on docker stop
+# exec form: python is PID 1, receives SIGTERM correctly on docker stop
+CMD ["python", "app.py"]
