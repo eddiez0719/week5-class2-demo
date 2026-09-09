@@ -1,0 +1,4 @@
+# .env is generated per-run by the workflow/Makefile with the image name+tag; never committed
+.env
+__pycache__/
+*.pyc

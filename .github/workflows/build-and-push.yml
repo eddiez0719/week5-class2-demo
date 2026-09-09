@@ -1,0 +1,62 @@
+name: Demo 2 - Build and Push
+
+on:
+  push:
+    branches: [main]   # only build/push on merge to main
+  workflow_dispatch:    # keep manual trigger for debugging
+
+permissions:
+  id-token: write   # required for OIDC login to AWS
+  contents: read     # required for checkout
+
+env:
+  AWS_REGION: ap-southeast-2
+  ECR_REPOSITORY: my-app   # target ECR repo, must already exist in AWS
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15   # prevent a stuck job from occupying the runner indefinitely
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4   # without this, docker build can't find the Dockerfile
+
+      - name: Authenticate to AWS using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr   # id lets later steps read steps.login-ecr.outputs.registry
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Write .env
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}   # registry hostname from the login step
+        run: |
+          echo "DOCKER_IMAGE_NAME=${ECR_REGISTRY}/${ECR_REPOSITORY}" > .env   # read by the Makefile
+          echo "TAG=${GITHUB_SHA}" >> .env                                    # commit SHA tag: unique, traceable
+
+      - name: Lint Dockerfile
+        run: make lint
+
+      - name: Build image
+        run: make build
+
+      - name: Run container
+        run: make run
+
+      - name: Test application
+        run: make test
+
+      - name: Push image to ECR
+        run: make push
+
+      - name: Show container logs on failure
+        if: failure()   # only runs if an earlier step failed, to help debugging
+        run: docker compose logs --no-color
+
+      - name: Clean up container
+        if: always()   # always clean up, even on failure, to avoid leftover containers on the runner
+        run: make down

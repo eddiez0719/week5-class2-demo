@@ -1,0 +1,15 @@
+services:
+  app:
+    image: "${DOCKER_IMAGE_NAME:-my-app}:${TAG:-local}"   # values come from .env; falls back to local defaults
+    ports:
+      - "127.0.0.1:5000:5000"   # bind loopback only, not exposed to LAN/public
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3)"
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s   # grace period before failing healthchecks during startup

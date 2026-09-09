@@ -1,0 +1,6 @@
+# these are unrelated to the running app or may contain sensitive/environment-specific values
+.git
+.github
+.env
+__pycache__
+*.pyc
