@@ -1,0 +1,8 @@
+FROM python:3.12-slim
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+COPY --chown=10001:100001 app.py /app/app.py
+USER 10001:100001
+EXPOSE 5000
+CMD ["python", "app.py"]

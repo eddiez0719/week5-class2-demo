@@ -1,0 +1,46 @@
+name: Demo2-Build-and-Push
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+env:
+  AWS_REGION: ap-southeast-2
+  ECR_REPOSITORY: week5-class2-demo
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+      - name: Authentiate to AWS using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Write .env
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          echo "DOCKER_IMAGE_NAME=${ECR_REGISTRY}/${ECR_REPOSITORY}" > .env
+          echo "TAG=${GITHUB_SHA}" >> .env
+      - name: Lint Dockerfile
+        run: make lint
+      - name: Build image
+        run: make build
+      - name: Test application
+        run: make test
+      - name: Push image to Amazon ECR
+        run: make push
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Clean up container
+        if: always()
+        run: make down
